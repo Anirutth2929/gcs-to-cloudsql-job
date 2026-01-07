@@ -3,7 +3,6 @@ import os
 from google.cloud import storage
 import pymysql
 
-
 # Environment variables
 BUCKET_NAME = os.environ["BUCKET_NAME"]
 CSV_FILE_NAME = os.environ["CSV_FILE_NAME"]
