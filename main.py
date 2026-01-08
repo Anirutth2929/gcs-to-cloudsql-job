@@ -56,7 +56,7 @@ def main():
         try:
             cursor.execute(insert_sql, (row["name"], row["email"]))
             inserted += 1
-        except IntegrityError as e:
+        except pymysql.err.IntegrityError as e:
             # MySQL duplicate key error code
             if e.args[0] == 1062:
                 skipped += 1
