@@ -8,7 +8,6 @@ from google.cloud import secretmanager
 
 
 def get_secret(secret_id):
-    # Automatically provided by Cloud Run / Cloud Run Job
     project_id = os.environ["GOOGLE_CLOUD_PROJECT"]
 
     client = secretmanager.SecretManagerServiceClient()
@@ -19,7 +18,7 @@ def get_secret(secret_id):
 
 
 def main():
-    # Non-sensitive config (env vars)
+    # Config
     bucket_name = os.environ["BUCKET_NAME"]
     csv_file_name = os.environ["CSV_FILE_NAME"]
     db_name = os.environ["DB_NAME"]
@@ -29,23 +28,23 @@ def main():
     db_user = get_secret("db-user")
     db_password = get_secret("db-password")
 
-    # 1. Download CSV from GCS
+    # Download CSV
     storage_client = storage.Client()
     bucket = storage_client.bucket(bucket_name)
     blob = bucket.blob(csv_file_name)
     csv_data = blob.download_as_text()
 
-    # 2. Connect to Cloud SQL
+    # DB connection
     connection = pymysql.connect(
         user=db_user,
         password=db_password,
         unix_socket=f"/cloudsql/{instance_connection_name}",
-        database=db_name
+        database=db_name,
+        autocommit=False
     )
 
     cursor = connection.cursor()
 
-    # 3. Insert CSV data with duplicate handling
     insert_sql = "INSERT INTO users (name, email) VALUES (%s, %s)"
     reader = csv.DictReader(csv_data.splitlines())
 
@@ -56,13 +55,15 @@ def main():
         try:
             cursor.execute(insert_sql, (row["name"], row["email"]))
             inserted += 1
-        except pymysql.err.IntegrityError as e:
-            # MySQL duplicate key error code
+
+        except IntegrityError as e:
             if e.args[0] == 1062:
+                connection.rollback()   # ⭐ THIS WAS MISSING
                 skipped += 1
                 print(f"Duplicate email skipped: {row['email']}")
             else:
-                raise  # unknown DB error → fail job
+                connection.rollback()
+                raise
 
     connection.commit()
     cursor.close()
