@@ -2,11 +2,13 @@ import csv
 import os
 
 import pymysql
+from pymysql.err import IntegrityError
 from google.cloud import storage
 from google.cloud import secretmanager
 
 
 def get_secret(secret_id):
+    # Automatically provided by Cloud Run / Cloud Run Job
     project_id = os.environ["GOOGLE_CLOUD_PROJECT"]
 
     client = secretmanager.SecretManagerServiceClient()
@@ -43,18 +45,30 @@ def main():
 
     cursor = connection.cursor()
 
-    # 3. Insert CSV data (id is AUTO_INCREMENT)
+    # 3. Insert CSV data with duplicate handling
     insert_sql = "INSERT INTO users (name, email) VALUES (%s, %s)"
     reader = csv.DictReader(csv_data.splitlines())
 
+    inserted = 0
+    skipped = 0
+
     for row in reader:
-        cursor.execute(insert_sql, (row["name"], row["email"]))
+        try:
+            cursor.execute(insert_sql, (row["name"], row["email"]))
+            inserted += 1
+        except IntegrityError as e:
+            # MySQL duplicate key error code
+            if e.args[0] == 1062:
+                skipped += 1
+                print(f"Duplicate email skipped: {row['email']}")
+            else:
+                raise  # unknown DB error → fail job
 
     connection.commit()
     cursor.close()
     connection.close()
 
-    print("CSV data inserted successfully")
+    print(f"Job finished. Inserted={inserted}, Duplicates skipped={skipped}")
 
 
 if __name__ == "__main__":
