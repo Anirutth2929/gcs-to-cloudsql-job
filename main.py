@@ -15,11 +15,13 @@ def get_secret(secret_id):
 
 
 def main():
+    # Config
     bucket_name = os.environ["BUCKET_NAME"]
     csv_file_name = os.environ["CSV_FILE_NAME"]
     db_name = os.environ["DB_NAME"]
     instance_connection_name = os.environ["INSTANCE_CONNECTION_NAME"]
 
+    # Secrets
     db_user = get_secret("db-user")
     db_password = get_secret("db-password")
 
@@ -29,31 +31,36 @@ def main():
     blob = bucket.blob(csv_file_name)
     csv_data = blob.download_as_text()
 
-    # DB connection
+    # Connect to Cloud SQL
     connection = pymysql.connect(
         user=db_user,
         password=db_password,
         unix_socket=f"/cloudsql/{instance_connection_name}",
-        database=db_name
+        database=db_name,
+        autocommit=False
     )
 
     cursor = connection.cursor()
 
     insert_sql = """
-    INSERT IGNORE INTO users (name, email)
-    VALUES (%s, %s)
+        INSERT IGNORE INTO users (name, email)
+        VALUES (%s, %s)
     """
 
     reader = csv.DictReader(csv_data.splitlines())
 
+    inserted = 0
+
     for row in reader:
         cursor.execute(insert_sql, (row["name"], row["email"]))
+        if cursor.rowcount == 1:
+            inserted += 1
 
     connection.commit()
     cursor.close()
     connection.close()
 
-    print("Job finished. Duplicates automatically ignored.")
+    print(f"Job finished. Inserted={inserted}. Duplicates automatically ignored.")
 
 
 if __name__ == "__main__":
