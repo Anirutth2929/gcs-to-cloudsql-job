@@ -6,6 +6,7 @@ from google.cloud import storage
 from google.cloud import secretmanager
 
 
+
 def get_secret(secret_id):
     project_id = os.environ["GOOGLE_CLOUD_PROJECT"]
     client = secretmanager.SecretManagerServiceClient()
